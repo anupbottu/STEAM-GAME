@@ -1,0 +1,400 @@
+import shiffman.box2d.*;
+import org.jbox2d.collision.shapes.*;
+import org.jbox2d.common.*;
+import org.jbox2d.dynamics.*;
+
+// A reference to our box2d world
+Box2DProcessing box2d;
+Car b;
+Obstacle b2;
+Obstacle b3;
+Obstacle b4;
+Obstacle b5;
+FreezeBomb fb;
+AICar d3;
+ArrayList<AICar> enemies = new ArrayList<AICar>();
+void setup() {
+  size(800,600);
+  
+  box2d = new Box2DProcessing(this);
+  box2d.createWorld();
+  // We are setting a custom gravity
+  box2d.setGravity(0, 0);
+  b = new Car(400, 100);
+  b2 = new Obstacle(150, 150);
+  b3 = new Obstacle(250, 150);
+  b4 = new Obstacle(150, 250);
+  b5 = new Obstacle(250, 250);
+  fb = new FreezeBomb(250,75);
+  for (int i = 0; i < 3; i++) {
+    enemies.add(new AICar(20, random(0, height)));
+  }
+  
+}
+
+void draw() {
+   background(255);
+  
+  // We must always step through time!
+  box2d.step();
+  
+  b.display();
+  b2.display();
+  b3.display();
+  b4.display();
+  b5.display();
+  fb.display();
+  for (AICar d3 : enemies) {
+    d3.display(b);
+  }
+
+  if(dist(b.xPosition,b.yPosition,250,75)<200)
+  {
+    for (AICar d3 : enemies) {
+    d3.stop();
+    }
+    fb.highlight();
+    System.out.print("COOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOL.");
+  }
+}
+
+
+class AICar {
+
+  // We need to keep track of a Body and a width and height
+  PImage car;
+  Body body;
+  float w;
+  float h;
+  float rotation;
+  Vec2 pos, vel;
+  float mag;
+  boolean immunity;
+
+
+  // Constructor
+  AICar(float x, float y) {
+    w = 50;
+    h = 20;
+    // Add the box to the box2d world
+    makeBody(new Vec2(x, y), w, h);
+    mag = 0;
+    pos = new Vec2(x, y);
+    vel = new Vec2(0.0, 0.0);
+    car = loadImage("car2.png");
+    car.resize(50,20);
+  }
+
+  void accelerate(Car other) {
+    float dist = dist(box2d.getBodyPixelCoord(body).x, box2d.getBodyPixelCoord(body).y, (box2d.getBodyPixelCoord(other.body).x/*+50*cos(other.rotation)*/), (box2d.getBodyPixelCoord(other.body).y/*+50*sin(other.rotation)*/));
+    mag+=0.1;
+    float distx = (box2d.getBodyPixelCoord(other.body).x/*+50*cos(other.rotation)*/) - box2d.getBodyPixelCoord(body).x;
+    float disty = (box2d.getBodyPixelCoord(other.body).y/*+50*sin(other.rotation)*/) - box2d.getBodyPixelCoord(body).y;
+
+    if (distx > 0 && disty > 0) rotation = acos(distx/dist);
+    if (distx < 0 && disty > 0) rotation = PI-acos((distx*-1)/(dist));
+    if (distx < 0 && disty < 0) rotation = PI+acos((distx*-1)/(dist));
+    if (distx > 0 && disty < 0) rotation = PI+acos((distx*-1)/(dist));
+
+    if (mag > 12) mag = 12;
+  }
+
+  void move(Car other) {
+    accelerate(other);
+
+    vel.x = cos(rotation)*mag;
+    vel.y = sin(-rotation)*mag;
+
+    pos.x += vel.x;
+    pos.y += vel.y;
+
+    body.setTransform(body.getWorldCenter(), -rotation);
+    body.setLinearVelocity(new Vec2(vel.x, vel.y).mulLocal(3));
+  }
+
+void stop() {
+    body.setLinearVelocity(new Vec2(0,0).mulLocal(3));
+    translate(pos.x, pos.y);
+
+  }
+
+
+
+  // Drawing the box
+  void display(Car other) {
+    move(other);
+    // We look at each body and get its screen position
+    Vec2 pos3 = box2d.getBodyPixelCoord(body);
+    // Get its angle of rotation
+    //float a = body.getAngle();
+
+    rectMode(CENTER);
+    pushMatrix();
+    translate(pos3.x, pos3.y);
+    rotate(rotation);
+    fill(175);
+    stroke(0);
+    image(car, -25,-10);
+    popMatrix();
+  }
+
+  // This function adds the rectangle to the box2d world
+  void makeBody(Vec2 center, float w_, float h_) {
+
+    // Define a polygon (this is what we use for a rectangle)
+    PolygonShape sd = new PolygonShape();
+    float box2dW = box2d.scalarPixelsToWorld(w_/2);
+    float box2dH = box2d.scalarPixelsToWorld(h_/2);
+    sd.setAsBox(box2dW, box2dH);
+
+    // Define a fixture
+    FixtureDef fd = new FixtureDef();
+    fd.shape = sd;
+    // Parameters that affect physics
+    fd.density = 1;
+    fd.friction = 0.3;
+    fd.restitution = 0.5;
+
+    // Define the body and make it from the shape
+    BodyDef bd = new BodyDef();
+    bd.type = BodyType.DYNAMIC;
+    bd.position.set(box2d.coordPixelsToWorld(center));
+
+    body = box2d.createBody(bd);
+    body.createFixture(fd);
+  }
+}
+
+
+class Car {
+
+  // We need to keep track of a Body and a width and height
+  Body body;
+  float w;
+  float h;
+  float rotation;
+  Vec2 pos; 
+  Vec2 vel;
+  float mag;
+  PImage car;
+  boolean hasBomb;
+  float xPosition;
+  float yPosition;
+  
+
+  // Constructor
+  Car(float x, float y) {
+    w = 50;
+    h = 20;
+    // Add the box to the box2d world
+    makeBody(new Vec2(x, y), w, h);
+    mag = 0;
+    pos = new Vec2(x,y);
+    vel = new Vec2(0.0,0.0);
+    car = loadImage("car.png");
+    car.resize(50,20);
+  }
+
+  void move() {
+    
+    {      accelerate();
+
+    vel.x = cos(-rotation)*mag;
+    vel.y = sin(-rotation)*mag;
+
+    pos.x += vel.x;
+    pos.y += vel.y;
+    
+    xPosition=pos.x;
+    yPosition=pos.y;
+    
+    
+    body.setTransform(body.getWorldCenter(), -rotation);
+    body.setLinearVelocity(new Vec2(vel.x, vel.y));
+    }
+  }
+
+
+  void accelerate() {
+    if (keyPressed && key == 'd') rotation += .1;
+    if (keyPressed && key == 'a') rotation -= .1;
+    if (mousePressed) {
+      mag+=0.5;
+    } else {
+      if (mag > 0) mag -= 0.5;
+      if (mag < 0) mag += 0.5;
+      if (Math.abs(mag) < 0.7) mag = 0;
+    }
+
+    if (mag > 50) mag = 50;
+  }
+
+  // Drawing the box
+  void display() {
+    move();
+    // We look at each body and get its screen position
+    Vec2 pos3 = box2d.getBodyPixelCoord(body);
+    // Get its angle of rotation
+    //float a = body.getAngle();
+
+    rectMode(CENTER);
+    pushMatrix();
+    translate(pos3.x, pos3.y);
+    rotate(rotation);
+    fill(175);
+    stroke(0);
+    image(car, -25,-10);
+    popMatrix();
+  }
+
+  // This function adds the rectangle to the box2d world
+  void makeBody(Vec2 center, float w_, float h_) {
+
+    // Define a polygon (this is what we use for a rectangle)
+    PolygonShape sd = new PolygonShape();
+    float box2dW = box2d.scalarPixelsToWorld(w_/2);
+    float box2dH = box2d.scalarPixelsToWorld(h_/2);
+    sd.setAsBox(box2dW, box2dH);
+
+    // Define a fixture
+    FixtureDef fd = new FixtureDef();
+    fd.shape = sd;
+    // Parameters that affect physics
+    fd.density = 1;
+    fd.friction = 0.3;
+    fd.restitution = 0.5;
+
+    // Define the body and make it from the shape
+    BodyDef bd = new BodyDef();
+    bd.type = BodyType.DYNAMIC;
+    bd.position.set(box2d.coordPixelsToWorld(center));
+
+    body = box2d.createBody(bd);
+    body.createFixture(fd);
+  }
+  
+/*  boolean intersect(FreezeBomb fb) {
+
+    // Objects can be passed into functions as arguments too! 
+    float distance = dist(pos.x, pos.y, 250, 75); // Calculate distance
+
+    if (distance < 20) {
+      return true;
+    } else {
+      return false;
+    }
+  }*/
+}
+
+// The Nature of Code
+// <http://www.shiffman.net/teaching/nature>
+// Spring 2010
+// Box2DProcessing example
+
+class FreezeBomb {
+
+  // We need to keep track of a Body and a width and height
+  Body body;
+  float w;
+  float h;
+  float rotation;
+  PVector pos, vel;
+  float mag;
+  float x;
+  float y;
+  int r = 20;
+
+  // Constructor
+  FreezeBomb(float x, float y) {
+    w = 20;
+    h = 20;
+    // Add the box to the box2d world
+    this.x=x;
+    this.y=y;
+    mag = 0;
+    pos = new PVector(x,y);
+    vel = new PVector(0.0,0.0);
+  }
+
+  // Drawing the box
+  void display() {
+    stroke(0);
+    fill(150);
+    ellipse(x, y, r*2, r*2);
+  }
+  
+  void highlight() {
+    fill(500);
+  }
+}
+
+// The Nature of Code
+// <http://www.shiffman.net/teaching/nature>
+// Spring 2010
+// Box2DProcessing example
+
+// A rectangular box
+class Obstacle {
+
+  // We need to keep track of a Body and a width and height
+  Body body;
+  float w;
+  float h;
+  float rotation;
+  PVector pos, vel;
+  float mag;
+
+  // Constructor
+  Obstacle(float x, float y) {
+    w = 100;
+    h = 100;
+    // Add the box to the box2d world
+    makeBody(new Vec2(x, y), w, h);
+    mag = 0;
+    pos = new PVector(x,y);
+    vel = new PVector(0.0,0.0);
+  }
+
+  // Drawing the box
+  void display() {
+    // We look at each body and get its screen position
+    Vec2 pos3 = box2d.getBodyPixelCoord(body);
+    // Get its angle of rotation
+    //float a = body.getAngle();
+
+    rectMode(CENTER);
+    pushMatrix();
+    translate(pos3.x, pos3.y);
+    rotate(rotation);
+    fill(175);
+    stroke(0);
+    rect(0, 0, w, h);
+    popMatrix();
+  }
+
+  // This function adds the rectangle to the box2d world
+  void makeBody(Vec2 center, float w_, float h_) {
+
+    // Define a polygon (this is what we use for a rectangle)
+    PolygonShape sd = new PolygonShape();
+    float box2dW = box2d.scalarPixelsToWorld(w_/2);
+    float box2dH = box2d.scalarPixelsToWorld(h_/2);
+    sd.setAsBox(box2dW, box2dH);
+
+    // Define a fixture
+    FixtureDef fd = new FixtureDef();
+    fd.shape = sd;
+    // Parameters that affect physics
+    fd.density = 1;
+    fd.friction = 0.3;
+    fd.restitution = 0.5;
+
+    // Define the body and make it from the shape
+    BodyDef bd = new BodyDef();
+    bd.type = BodyType.STATIC;
+    bd.position.set(box2d.coordPixelsToWorld(center));
+
+    body = box2d.createBody(bd);
+    body.createFixture(fd);
+  }
+}
