@@ -9,6 +9,8 @@ class AICar {
   float rotation;
   Vec2 pos, vel;
   float mag;
+  boolean immunity;
+
 
   // Constructor
   AICar(float x, float y) {
@@ -34,7 +36,7 @@ class AICar {
     if (distx < 0 && disty < 0) rotation = PI+acos((distx*-1)/(dist));
     if (distx > 0 && disty < 0) rotation = PI+acos((distx*-1)/(dist));
 
-    if (mag > 20) mag = 20;
+    if (mag > 12) mag = 12;
   }
 
   void move(Car other) {
@@ -50,6 +52,15 @@ class AICar {
     body.setLinearVelocity(new Vec2(vel.x, vel.y).mulLocal(3));
   }
 
+void stop() {
+    int m = millis();
+    body.setLinearVelocity(new Vec2(0,0).mulLocal(3));
+    while ((millis()-m)<10)
+    {
+      if(mag>0)
+        mag=0;
+    }
+  }
 
 
 
